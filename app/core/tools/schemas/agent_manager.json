@@ -1,0 +1,27 @@
+{
+  "name": "AgentManager",
+  "description": "A tool for managing AI agents and switching between them. Supports switching agents, listing available agents, getting current agent info, and getting information about specific agents.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["switch", "list", "current", "info"],
+        "description": "The action to perform: switch to a different agent, list available agents, get current agent info, or get info about a specific agent"
+      },
+      "agent_id": {
+        "type": "string",
+        "description": "The ID of the agent to switch to or get info about (required for switch and info actions)"
+      },
+      "user_id": {
+        "type": "string",
+        "description": "The user ID for user-specific actions like switching agents or getting current agent (required for switch and current actions)"
+      },
+      "channel_id": {
+        "type": "string",
+        "description": "The channel ID for channel-specific actions like switching agents or getting current agent (required for switch and current actions)"
+      }
+    },
+    "required": ["action"]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the tool"
+    },
+    "description": {
+      "type": "string",
+      "description": "A description of what the tool does"
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["object"]
+        },
+        "properties": {
+          "type": "object",
+          "description": "The properties of the tool parameters"
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of required parameter names"
+        }
+      },
+      "required": ["type", "properties"]
+    }
+  },
+  "required": ["name", "description", "parameters"]
+}

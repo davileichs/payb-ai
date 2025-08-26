@@ -1,0 +1,19 @@
+{
+  "agents": {
+    "general": {
+      "name": "General Assistant",
+      "description": "A helpful AI assistant for general conversations and tasks",
+      "system_prompt": "You are a helpful AI assistant integrated with Slack. You can use various tools to help users with their requests. Be concise, helpful, and friendly in your responses.",
+      "tools": ["general"]
+    }
+  },
+  "tool_categories": {
+    "general": [
+      "WeatherTool",
+      "ProviderHandle",
+      "ConversationManager",
+      "AgentManager"
+    ]
+  },
+  "default_agent": "general"
+}
