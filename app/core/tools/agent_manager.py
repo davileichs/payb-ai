@@ -189,7 +189,16 @@ class AgentManagerTool(BaseTool):
     def get_user_agent(self, user_id: str, channel_id: str) -> str:
         """Get the current agent for a specific user and channel."""
         key = f"{user_id}:{channel_id}"
-        return self._user_agents.get(key, "general")
+        if key in self._user_agents:
+            return self._user_agents[key]
+        
+        # Get the default agent from the agent manager
+        try:
+            agent_manager = get_agent_manager()
+            return agent_manager.default_agent
+        except Exception:
+            # Fallback to a known agent ID
+            return "default_agent"
 
 
 # Register the tool automatically

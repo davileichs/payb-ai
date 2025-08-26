@@ -1,19 +1,28 @@
 {
   "agents": {
-    "general": {
-      "name": "General Assistant",
-      "description": "A helpful AI assistant for general conversations and tasks",
-      "system_prompt": "You are a helpful AI assistant integrated with Slack. You can use various tools to help users with their requests. Be concise, helpful, and friendly in your responses.",
+    "default_agent": {
+      "name": "Default Agent",
+      "description": "General-purpose AI assistant with access to various tools",
+      "system_prompt": "You are a helpful AI assistant. You have access to various tools to help users with different tasks. Always be helpful and provide accurate information.",
       "tools": ["general"]
+    },
+    "technical_support": {
+      "name": "Technical Support Agent",
+      "description": "Specialized in technical support and API documentation",
+      "system_prompt": "You are a technical support specialist. You excel at helping users with technical questions, API integration, and documentation searches. Use the PayablDocsSearch tool to find relevant documentation when users ask about payabl. services.",
+      "tools": ["general", "technical"]
     }
   },
   "tool_categories": {
     "general": [
-      "WeatherTool",
       "ProviderHandle",
-      "ConversationManager",
-      "AgentManager"
+      "ConversationManagerTool", 
+      "AgentManagerTool",
+      "PayablDocsSearch"
+    ],
+    "technical": [
+      "WeatherTool"
     ]
   },
-  "default_agent": "general"
+  "default_agent": "default_agent"
 }

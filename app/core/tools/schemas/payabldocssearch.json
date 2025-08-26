@@ -1,0 +1,19 @@
+{
+  "name": "PayablDocsSearch",
+  "description": "Search the payabl. API documentation for information about payment processing, integration guides, and API references. Returns relevant documentation sections with direct links.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "The search query to find relevant documentation. Can be specific terms like '3DSecure', 'credit card processing', 'API integration', or general concepts like 'payment methods', 'refunds', 'webhooks'."
+      },
+      "category": {
+        "type": "string",
+        "description": "Optional category to narrow down the search. Examples: 'API Integration', 'Payment Methods', '3DSecure', 'Testing', 'Error Codes', 'SDK'",
+        "enum": ["API Integration", "Payment Methods", "3DSecure", "Testing", "Error Codes", "SDK", "Hosted Payment Page", "POS Terminals", "E-commerce Platforms", "Reference"]
+      }
+    },
+    "required": ["query"]
+  }
+}

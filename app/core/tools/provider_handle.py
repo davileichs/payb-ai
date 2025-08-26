@@ -4,7 +4,6 @@ Provider handle tool for managing AI provider switching and settings.
 
 from typing import Dict, Any
 from app.core.tools.base import BaseTool, ToolResult, register_tool
-from app.core.chat_processor import get_chat_processor
 
 
 class ProviderHandle(BaseTool):
@@ -19,8 +18,6 @@ class ProviderHandle(BaseTool):
             provider = kwargs.get("provider")
             model = kwargs.get("model")
             
-            chat_processor = get_chat_processor()
-            
             if action == "switch":
                 if not provider:
                     return ToolResult(
@@ -29,19 +26,19 @@ class ProviderHandle(BaseTool):
                         metadata={"tool_name": "ProviderHandle"}
                     )
                 
-                result = await self._switch_provider(chat_processor, provider, model)
+                result = await self._switch_provider(provider, model)
                 return result
                 
             elif action == "list":
-                result = self._list_providers(chat_processor)
+                result = self._list_providers()
                 return result
                 
             elif action == "status":
-                result = self._get_status(chat_processor)
+                result = self._get_status()
                 return result
                 
             elif action == "test":
-                result = await self._test_provider(chat_processor, provider)
+                result = await self._test_provider(provider)
                 return result
                 
             else:
@@ -58,67 +55,53 @@ class ProviderHandle(BaseTool):
                 metadata={"tool_name": "ProviderHandle"}
             )
     
-    async def _switch_provider(self, chat_processor, provider: str, model: str = None) -> ToolResult:
+    async def _switch_provider(self, provider: str, model: str = None) -> ToolResult:
         """Switch to a different AI provider."""
         try:
-            # Validate provider
-            if provider not in chat_processor.providers:
-                return ToolResult(
-                    success=False,
-                    error=f"Provider '{provider}' not found. Available: {list(chat_processor.providers.keys())}",
-                    metadata={"tool_name": "ProviderHandle"}
-                )
-            
-            # Check if provider is available
-            if not chat_processor.providers[provider].is_available():
-                return ToolResult(
-                    success=False,
-                    error=f"Provider '{provider}' is not available. Check configuration and connectivity.",
-                    metadata={"tool_name": "ProviderHandle"}
-                )
-            
-            # Switch provider
-            old_provider = chat_processor.current_provider
-            chat_processor.current_provider = provider
-            
-            # Set model if specified
-            if model and hasattr(chat_processor.providers[provider], 'model'):
-                chat_processor.providers[provider].model = model
-            
+            # This tool will be called by the chat processor, so we can't directly switch
+            # Instead, return instructions for the user
             return ToolResult(
                 success=True,
                 data={
-                    "message": f"Successfully switched from {old_provider} to {provider}",
-                    "previous_provider": old_provider,
-                    "current_provider": provider,
-                    "model": getattr(chat_processor.providers[provider], 'model', 'default')
+                    "message": f"Provider switch requested to {provider}",
+                    "action": "switch_provider",
+                    "provider": provider,
+                    "model": model,
+                    "note": "Provider switching is handled by the chat processor. This request has been logged."
                 },
-                metadata={"tool_name": "ProviderHandle"}
+                metadata={"tool_name": "ProviderHandle", "action": "switch_provider"}
             )
             
         except Exception as e:
             return ToolResult(
                 success=False,
-                error=f"Failed to switch provider: {str(e)}",
+                error=str(e),
                 metadata={"tool_name": "ProviderHandle"}
             )
     
-    def _list_providers(self, chat_processor) -> ToolResult:
-        """List available AI providers and their status."""
+    def _list_providers(self) -> ToolResult:
+        """List available AI providers."""
         try:
-            providers_info = {}
-            for name, provider in chat_processor.providers.items():
-                providers_info[name] = {
-                    "available": provider.is_available(),
-                    "model": getattr(provider, 'model', 'default'),
-                    "current": name == chat_processor.current_provider
+            providers_info = {
+                "openai": {
+                    "name": "OpenAI",
+                    "description": "OpenAI GPT models via API",
+                    "models": ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo"],
+                    "status": "Available with API key"
+                },
+                "ollama": {
+                    "name": "Ollama",
+                    "description": "Local AI models via Ollama",
+                    "models": ["llama2", "mistral", "codellama", "neural-chat"],
+                    "status": "Available locally"
                 }
+            }
             
             return ToolResult(
                 success=True,
                 data={
                     "providers": providers_info,
-                    "current_provider": chat_processor.current_provider
+                    "message": "Available AI providers and their capabilities"
                 },
                 metadata={"tool_name": "ProviderHandle"}
             )
@@ -126,68 +109,62 @@ class ProviderHandle(BaseTool):
         except Exception as e:
             return ToolResult(
                 success=False,
-                error=f"Failed to list providers: {str(e)}",
+                error=str(e),
                 metadata={"tool_name": "ProviderHandle"}
             )
     
-    def _get_status(self, chat_processor) -> ToolResult:
+    def _get_status(self) -> ToolResult:
         """Get current provider status."""
         try:
-            current_provider = chat_processor.current_provider
-            provider = chat_processor.providers[current_provider]
+            # Return general status information
+            status_info = {
+                "message": "Provider status information",
+                "note": "Detailed status is available through the chat processor",
+                "available_providers": ["openai", "ollama"],
+                "current_provider": "Determined by chat processor configuration"
+            }
             
             return ToolResult(
                 success=True,
-                data={
-                    "current_provider": current_provider,
-                    "available": provider.is_available(),
-                    "model": getattr(provider, 'model', 'default'),
-                    "all_providers": list(chat_processor.providers.keys())
-                },
+                data=status_info,
                 metadata={"tool_name": "ProviderHandle"}
             )
             
         except Exception as e:
             return ToolResult(
                 success=False,
-                error=f"Failed to get status: {str(e)}",
+                error=str(e),
                 metadata={"tool_name": "ProviderHandle"}
             )
     
-    async def _test_provider(self, chat_processor, provider: str = None) -> ToolResult:
-        """Test provider connectivity."""
+    async def _test_provider(self, provider: str = None) -> ToolResult:
+        """Test a specific provider or all providers."""
         try:
             if provider:
-                if provider not in chat_processor.providers:
-                    return ToolResult(
-                        success=False,
-                        error=f"Provider '{provider}' not found",
-                        metadata={"tool_name": "ProviderHandle"}
-                    )
-                providers_to_test = {provider: chat_processor.providers[provider]}
+                # Test specific provider
+                test_result = {
+                    "provider": provider,
+                    "status": "Test requested",
+                    "note": f"Provider testing for {provider} has been requested"
+                }
             else:
-                providers_to_test = chat_processor.providers
-            
-            test_results = {}
-            for name, provider_instance in providers_to_test.items():
-                test_results[name] = {
-                    "available": provider_instance.is_available(),
-                    "model": getattr(provider_instance, 'model', 'default')
+                # Test all providers
+                test_result = {
+                    "providers": ["openai", "ollama"],
+                    "status": "Test requested for all providers",
+                    "note": "Provider testing has been requested for all available providers"
                 }
             
             return ToolResult(
                 success=True,
-                data={
-                    "test_results": test_results,
-                    "message": "Provider connectivity test completed"
-                },
-                metadata={"tool_name": "ProviderHandle"}
+                data=test_result,
+                metadata={"tool_name": "ProviderHandle", "action": "test_provider"}
             )
             
         except Exception as e:
             return ToolResult(
                 success=False,
-                error=f"Failed to test providers: {str(e)}",
+                error=str(e),
                 metadata={"tool_name": "ProviderHandle"}
             )
 

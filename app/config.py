@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     ai_provider: str = Field(default="openai", env="AI_PROVIDER")
     openai_api_key: Optional[str] = Field(None, env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4", env="OPENAI_MODEL")
+    ollama_api_key: Optional[str] = Field(None, env="OLLAMA_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="llama2", env="OLLAMA_MODEL")
     ai_temperature: float = Field(default=0.7, env="AI_TEMPERATURE")

@@ -93,20 +93,46 @@ class ConversationManager:
         self.redis_storage = get_redis_storage()
         self.use_redis = hasattr(self.settings, 'redis_host') and self.settings.redis_host
         
-        # Load existing conversations
-        self._load_conversations()
+        # Load existing conversations (synchronous initialization)
+        self._load_conversations_sync()
     
-    async def _load_conversations(self):
-        """Load conversations from storage."""
+    def _load_conversations_sync(self):
+        """Synchronously load conversations from storage."""
         if self.use_redis:
             try:
-                await self.redis_storage.connect()
-                logger.info("Conversation manager initialized with Redis storage")
+                # Try to connect to Redis synchronously
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Schedule async connection
+                        loop.create_task(self._connect_redis())
+                    else:
+                        # Run in current loop
+                        loop.run_until_complete(self._connect_redis())
+                except RuntimeError:
+                    # No event loop, skip Redis connection
+                    self.use_redis = False
+                    logger.info("Conversation manager initialized with in-memory storage (no event loop)")
             except Exception as e:
                 logger.warning(f"Failed to connect to Redis, falling back to in-memory: {e}")
                 self.use_redis = False
         else:
             logger.info("Conversation manager initialized with in-memory storage")
+    
+    async def _connect_redis(self):
+        """Connect to Redis storage."""
+        try:
+            await self.redis_storage.connect()
+            logger.info("Conversation manager initialized with Redis storage")
+        except Exception as e:
+            logger.warning(f"Failed to connect to Redis, falling back to in-memory: {e}")
+            self.use_redis = False
+    
+    async def _load_conversations(self):
+        """Load conversations from storage (async version for compatibility)."""
+        # This method is kept for compatibility but the actual loading is done in _load_conversations_sync
+        pass
     
     async def _save_conversations(self):
         """Save conversations to storage."""

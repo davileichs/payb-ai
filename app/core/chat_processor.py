@@ -69,11 +69,19 @@ class ChatProcessor:
         # Get available tools if requested
         tools = None
         if use_tools:
-            # Get all available tools for the AI to choose from
-            available_tools = tool_registry.get_all_tools()
+            # Get tools specific to the user's current agent
+            tool_names = self.agent_manager.get_user_tools(user_id, channel_id)
             
-            if available_tools:
-                tools = [tool.get_schema() for tool in available_tools]
+            if tool_names:
+                # Get the actual tool instances from the registry
+                available_tools = []
+                for tool_name in tool_names:
+                    tool = tool_registry.get_tool(tool_name)
+                    if tool:
+                        available_tools.append(tool)
+                
+                if available_tools:
+                    tools = [tool.get_schema() for tool in available_tools]
         
         try:
             # Get AI response
@@ -85,8 +93,8 @@ class ChatProcessor:
             )
             
             # Handle tool calls if present
-            if "tool_calls" in response and response["tool_calls"]:
-                tool_results = await self._execute_tools(response["tool_calls"], self.current_provider)
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                tool_results = await self._execute_tools(response.tool_calls, self.current_provider)
                 
                 # Check for agent switches and update storage
                 for tool_result in tool_results:
@@ -109,7 +117,17 @@ class ChatProcessor:
                 messages.append({
                     "role": "assistant",
                     "content": response.content,
-                    "tool_calls": response.tool_calls
+                    "tool_calls": [
+                        {
+                            "id": tool_call.id if hasattr(tool_call, 'id') else f"call_{i}",
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.name if hasattr(tool_call, 'name') else tool_call.function.name,
+                                "arguments": tool_call.arguments if hasattr(tool_call, 'arguments') else tool_call.function.arguments
+                            }
+                        }
+                        for i, tool_call in enumerate(response.tool_calls)
+                    ]
                 })
                 
                 # Add tool results
@@ -146,7 +164,7 @@ class ChatProcessor:
                 "response": response.content,
                 "provider": self.current_provider,
                 "model": response.model,
-                "usage": response.usage.dict() if response.usage else {},
+                "usage": response.usage.model_dump() if response.usage else {},
                 "conversation_history": updated_context,
                 "conversation_id": conversation.id
             }
@@ -173,33 +191,53 @@ class ChatProcessor:
                 )
             }
     
-    async def _execute_tools(self, tool_calls: List[Dict[str, Any]], provider_name: str) -> List[Dict[str, Any]]:
+    async def _execute_tools(self, tool_calls: List[Any], provider_name: str) -> List[Dict[str, Any]]:
         """Execute the requested tools and return results."""
         results = []
         
         for tool_call in tool_calls:
             try:
                 if provider_name == "openai":
-                    # OpenAI format: function calling
-                    tool_name = tool_call["function"]["name"]
-                    tool_args = json.loads(tool_call["function"]["arguments"])
+                    # OpenAI format: FunctionCall objects
+                    if hasattr(tool_call, 'name') and hasattr(tool_call, 'arguments'):
+                        # Direct attributes (newer OpenAI format)
+                        tool_name = tool_call.name
+                        tool_args = json.loads(tool_call.arguments)
+                        tool_call_id = getattr(tool_call, 'id', f"call_{len(results)}")
+                    elif hasattr(tool_call, 'function'):
+                        # Nested function attribute (older format)
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        tool_call_id = getattr(tool_call, 'id', f"call_{len(results)}")
+                    else:
+                        # Fallback to dictionary format
+                        tool_name = tool_call["function"]["name"]
+                        tool_args = json.loads(tool_call["function"]["arguments"])
+                        tool_call_id = tool_call.get("id", f"call_{len(results)}")
                 elif provider_name == "ollama":
                     # Ollama format: modern tool calling (similar to OpenAI)
-                    tool_name = tool_call["function"]["name"]
-                    tool_args = tool_call["function"]["arguments"]
+                    if hasattr(tool_call, 'function'):
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        tool_call_id = getattr(tool_call, 'id', f"call_{len(results)}")
+                    else:
+                        tool_name = tool_call["function"]["name"]
+                        tool_args = json.loads(tool_call["function"]["arguments"])
+                        tool_call_id = tool_call.get("id", f"call_{len(results)}")
                 else:
                     # Default format
                     tool_name = tool_call.get("function", {}).get("name", tool_call.get("name", ""))
                     tool_args = json.loads(tool_call.get("function", {}).get("arguments", "{}"))
+                    tool_call_id = tool_call.get("id", f"call_{len(results)}")
                 
                 tool = tool_registry.get_tool(tool_name)
                 if tool:
                     try:
                         result = await tool.execute(**tool_args)
                         results.append({
-                            "tool_call_id": tool_call.get("id", f"call_{len(results)}"),
+                            "tool_call_id": tool_call_id,
                             "tool_name": tool_name,
-                            "result": result.dict() if hasattr(result, 'dict') else result
+                            "result": result.model_dump() if hasattr(result, 'model_dump') else result
                         })
                     except Exception as e:
                         # Skip tools that fail with exceptions - just log the error
@@ -212,7 +250,7 @@ class ChatProcessor:
             except Exception as e:
                 logger.error(f"Error processing tool call {tool_call}: {str(e)}")
                 results.append({
-                    "tool_call_id": tool_call.get("id", f"call_{len(results)}"),
+                    "tool_call_id": getattr(tool_call, 'id', f"call_{len(results)}") if hasattr(tool_call, 'id') else f"call_{len(results)}",
                     "tool_name": "unknown",
                     "result": {"success": False, "error": f"Tool call parsing error: {str(e)}"}
                 })
@@ -259,10 +297,10 @@ class ChatProcessor:
             logger.error(f"Failed to update conversation agent: {str(e)}")
     
     
-# Global chat processor instance
-chat_processor = ChatProcessor()
+# Global chat processor instance - removed to prevent import errors
+# chat_processor = ChatProcessor()
 
 
 def get_chat_processor() -> ChatProcessor:
-    """Get the global chat processor instance."""
-    return chat_processor
+    """Get a chat processor instance."""
+    return ChatProcessor()

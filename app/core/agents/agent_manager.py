@@ -61,6 +61,35 @@ class AgentManager:
         except Exception:
             # Fall back to default agent's system prompt
             return self.get_agent_system_prompt(self.default_agent)
+    
+    def get_agent_tools(self, agent_id: str) -> List[str]:
+        """Get the list of tool names available to a specific agent."""
+        agent_info = self.get_agent_info(agent_id)
+        if not agent_info:
+            return []
+        
+        tool_categories = agent_info.get("tools", [])
+        all_tools = []
+        
+        for category in tool_categories:
+            category_tools = self.agents_config.get("tool_categories", {}).get(category, [])
+            all_tools.extend(category_tools)
+        
+        return all_tools
+    
+    def get_user_tools(self, user_id: str, channel_id: str) -> List[str]:
+        """Get the tools available to a specific user and channel."""
+        try:
+            # Get the user's current agent from the agent manager tool
+            from app.core.tools.agent_manager import get_agent_manager_tool
+            agent_tool = get_agent_manager_tool()
+            current_agent_id = agent_tool.get_user_agent(user_id, channel_id)
+            
+            # Return the tools for that agent
+            return self.get_agent_tools(current_agent_id)
+        except Exception:
+            # Fall back to default agent's tools
+            return self.get_agent_tools(self.default_agent)
 
 
 # Global instance
