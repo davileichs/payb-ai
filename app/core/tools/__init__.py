@@ -1,7 +1,3 @@
-"""
-Tools package for AI chat functionality.
-"""
-
 from .weather import WeatherTool
 from .provider_handle import ProviderHandle
 from .conversation_manager import ConversationManagerTool

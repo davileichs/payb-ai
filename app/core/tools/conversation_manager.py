@@ -1,24 +1,15 @@
-"""
-Conversation manager tool for handling conversation operations.
-"""
-
 from typing import Dict, Any
 from app.core.tools.base import BaseTool, ToolResult, register_tool
 from app.core.conversation_manager import get_conversation_manager
 
-
 class ConversationManagerTool(BaseTool):
-    """
-    A tool for managing conversations, including cleanup and deletion.
-    """
     
     async def execute(self, **kwargs) -> ToolResult:
-        """Execute the conversation manager tool."""
         try:
             action = kwargs.get("action", "stats")
             user_id = kwargs.get("user_id")
             channel_id = kwargs.get("channel_id")
-            max_conversations = kwargs.get("max_conversations", 100)
+            max_conversations = kwargs.get("max_conversations", None)  # No automatic cleanup
             
             conversation_manager = get_conversation_manager()
             
@@ -63,7 +54,6 @@ class ConversationManagerTool(BaseTool):
             )
     
     async def _cleanup_conversations(self, conversation_manager, max_conversations: int) -> ToolResult:
-        """Clean up old conversations, keeping only the specified number."""
         try:
             total_before = len(conversation_manager.conversations)
             conversation_manager.cleanup_conversations(max_conversations)
@@ -90,14 +80,12 @@ class ConversationManagerTool(BaseTool):
             )
     
     async def _delete_conversation(self, conversation_manager, user_id: str, channel_id: str) -> ToolResult:
-        """Delete a specific conversation."""
         try:
             conversation_id = conversation_manager._generate_conversation_id(user_id, channel_id)
             
             if conversation_id in conversation_manager.conversations:
                 del conversation_manager.conversations[conversation_id]
                 
-                # Also try to delete from Redis if available
                 try:
                     if hasattr(conversation_manager, 'redis_storage') and conversation_manager.redis_storage:
                         await conversation_manager.redis_storage.delete_conversation(conversation_id)
@@ -129,7 +117,6 @@ class ConversationManagerTool(BaseTool):
             )
     
     def _get_stats(self, conversation_manager) -> ToolResult:
-        """Get conversation statistics."""
         try:
             stats = conversation_manager.get_conversation_stats()
             config = conversation_manager.get_configuration()
@@ -152,7 +139,6 @@ class ConversationManagerTool(BaseTool):
             )
     
     def _list_conversations(self, conversation_manager) -> ToolResult:
-        """List all conversations."""
         try:
             conversations = []
             for conv_id, conversation in conversation_manager.conversations.items():
@@ -182,7 +168,6 @@ class ConversationManagerTool(BaseTool):
             )
     
     async def _clear_all_conversations(self, conversation_manager) -> ToolResult:
-        """Clear all conversations."""
         try:
             total_conversations = len(conversation_manager.conversations)
             conversation_manager.conversations.clear()
@@ -190,7 +175,6 @@ class ConversationManagerTool(BaseTool):
             # Also try to clear from Redis if available
             try:
                 if hasattr(conversation_manager, 'redis_storage') and conversation_manager.redis_storage:
-                    # Get all conversation keys and delete them
                     keys = await conversation_manager.redis_storage.get_conversation_keys()
                     for key in keys:
                         await conversation_manager.redis_storage.delete_conversation(key)
@@ -212,7 +196,6 @@ class ConversationManagerTool(BaseTool):
                 error=f"Failed to clear all conversations: {str(e)}",
                 metadata={"tool_name": "ConversationManager"}
             )
-
 
 # Register the tool automatically
 register_tool(ConversationManagerTool())

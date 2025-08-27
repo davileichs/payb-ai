@@ -1,23 +1,15 @@
-"""
-Payabl Documentation Search Tool.
-Allows AI to search the payabl. API documentation and return relevant results with links.
-"""
-
 import httpx
 import re
 from typing import Dict, List, Any
 from app.core.tools.base import BaseTool, ToolResult
 
-
 class PayablDocsSearch(BaseTool):
-    """Tool for searching payabl. API documentation."""
     
     def __init__(self):
         super().__init__()
         self.base_url = "https://docs.payabl.com"
         
     async def execute(self, query: str, category: str = None) -> ToolResult:
-        """Search payabl. documentation for the given query."""
         try:
             # Search the documentation
             results = await self._search_docs(query, category)
@@ -41,7 +33,6 @@ class PayablDocsSearch(BaseTool):
                     metadata={"query": query, "category": category}
                 )
             
-            # Format results to always include URLs in a clear, consistent way
             formatted_results = []
             for result in results:
                 formatted_results.append({
@@ -53,7 +44,6 @@ class PayablDocsSearch(BaseTool):
                     "formatted_result": f"{result['title']} - {result['url']}"
                 })
             
-            # Create a response that forces the AI to always show URLs
             response_data = {
                 "query": query,
                 "category": category,
@@ -79,7 +69,6 @@ class PayablDocsSearch(BaseTool):
             )
     
     async def _search_docs(self, query: str, category: str = None) -> List[Dict[str, Any]]:
-        """Search the documentation and return relevant results."""
         try:
             # For demonstration purposes, we'll simulate searching multiple documentation pages
             # In a real implementation, you would crawl the actual docs site
@@ -165,11 +154,9 @@ class PayablDocsSearch(BaseTool):
             raise Exception(f"Failed to search documentation: {str(e)}")
     
     def _matches_category(self, page: Dict[str, Any], category: str) -> bool:
-        """Check if a page matches the specified category."""
         return page["category"] == category
     
     def _calculate_relevance(self, page: Dict[str, Any], query: str) -> float:
-        """Calculate relevance score for a page based on the query."""
         score = 0.0
         
         # Title relevance (highest weight)

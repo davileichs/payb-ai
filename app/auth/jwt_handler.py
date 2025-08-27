@@ -1,15 +1,9 @@
-"""
-JWT token handler for creating and validating authentication tokens.
-"""
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from jose import JWTError, jwt
 from app.config import get_settings
 
-
 class JWTHandler:
-    """Handles JWT token creation and validation."""
     
     def __init__(self):
         self.settings = get_settings()
@@ -22,7 +16,6 @@ class JWTHandler:
         data: dict, 
         expires_delta: Optional[timedelta] = None
     ) -> str:
-        """Create a new JWT access token."""
         to_encode = data.copy()
         
         if expires_delta:
@@ -35,7 +28,6 @@ class JWTHandler:
         return encoded_jwt
     
     def verify_token(self, token: str) -> Optional[dict]:
-        """Verify and decode a JWT token."""
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
             return payload
@@ -43,17 +35,12 @@ class JWTHandler:
             return None
     
     def get_token_expiration(self, token: str) -> Optional[datetime]:
-        """Get the expiration time of a token."""
         payload = self.verify_token(token)
         if payload and "exp" in payload:
             return datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         return None
 
-
-# Global JWT handler instance
 jwt_handler = JWTHandler()
 
-
 def get_jwt_handler() -> JWTHandler:
-    """Get the global JWT handler instance."""
     return jwt_handler

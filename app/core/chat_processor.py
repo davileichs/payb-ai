@@ -1,42 +1,74 @@
-"""
-Main AI chat processor that coordinates between AI providers and tools.
-"""
-
 from typing import List, Dict, Any, Optional
 import json
 import logging
+import os
+import importlib
+import inspect
 from app.config import get_settings
-from app.core.providers.openai import OpenAIProvider
-from app.core.providers.ollama import OllamaProvider
 from app.core.tools.base import tool_registry, ToolResult
 from app.core.conversation_manager import get_conversation_manager
 from app.core.agents import get_agent_manager
 
 logger = logging.getLogger(__name__)
 
-
 class ChatProcessor:
-    """Main chat processor that handles AI interactions and tool execution."""
+    
+    def _discover_providers(self) -> Dict[str, Any]:
+        """Dynamically discover and load all provider classes from the providers folder."""
+        providers = {}
+        providers_dir = os.path.join(os.path.dirname(__file__), "providers")
+        
+        # Get all Python files in the providers directory
+        for filename in os.listdir(providers_dir):
+            if filename.endswith('.py') and not filename.startswith('__') and filename != 'models.py':
+                module_name = filename[:-3]  # Remove .py extension
+                
+                try:
+                    # Import the module
+                    module = importlib.import_module(f"app.core.providers.{module_name}")
+                    
+                    # Find provider classes (classes ending with 'Provider')
+                    for name, obj in inspect.getmembers(module, inspect.isclass):
+                        if name.endswith('Provider') and hasattr(obj, 'chat_completion') and hasattr(obj, 'is_available'):
+                            provider_name = name.lower().replace('provider', '')
+                            try:
+                                provider_instance = obj()
+                                providers[provider_name] = provider_instance
+                                logger.info(f"Discovered provider: {provider_name}")
+                            except Exception as e:
+                                logger.warning(f"Failed to initialize {provider_name} provider: {str(e)}")
+                                
+                except Exception as e:
+                    logger.warning(f"Failed to load provider module {module_name}: {str(e)}")
+        
+        return providers
     
     def __init__(self):
         self.settings = get_settings()
-        self.providers = {
-            "openai": OpenAIProvider(),
-            "ollama": OllamaProvider()
-        }
         self.current_provider = self.settings.ai_provider
+        
+        # Dynamically discover and initialize providers
+        self.providers = self._discover_providers()
+        
+        # Always initialize conversation and agent managers
         self.conversation_manager = get_conversation_manager()
         self.agent_manager = get_agent_manager()
         
-        # Validate provider availability
-        if not self.providers[self.current_provider].is_available():
-            logger.warning(f"Configured provider {self.current_provider} is not available")
-            # Try to find an available provider
-            for name, provider in self.providers.items():
-                if provider.is_available():
-                    self.current_provider = name
-                    logger.info(f"Switched to provider: {name}")
-                    break
+        if not self.providers:
+            logger.error("No providers available!")
+            # Create a dummy provider entry to prevent complete failure
+            self.providers["none"] = None
+            self.current_provider = "none"
+        else:
+            # Validate provider availability
+            if self.current_provider not in self.providers or not self.providers[self.current_provider].is_available():
+                logger.warning(f"Configured provider {self.current_provider} is not available")
+                # Try to find an available provider
+                for name, provider in self.providers.items():
+                    if provider and provider.is_available():
+                        self.current_provider = name
+                        logger.info(f"Switched to provider: {name}")
+                        break
     
     async def process_message(
         self,
@@ -48,7 +80,17 @@ class ChatProcessor:
     ) -> Dict[str, Any]:
         """Process a user message and generate an AI response."""
         
-        # Get or create conversation from conversation manager
+        # Check if we have any available providers
+        if not self.providers or self.current_provider == "none" or not self.providers.get(self.current_provider):
+            return {
+                "response": "Sorry, no AI providers are currently available. Please check the configuration.",
+                "provider": "none",
+                "model": "none",
+                "usage": {},
+                "conversation_history": [],
+                "error": "No providers available"
+            }
+        
         conversation = self.conversation_manager.add_user_message(
             user_id=user_id,
             channel_id=channel_id,
@@ -57,7 +99,6 @@ class ChatProcessor:
             model=self.providers[self.current_provider].model if hasattr(self.providers[self.current_provider], 'model') else "unknown"
         )
         
-        # Get conversation context for LLM
         llm_context = self.conversation_manager.get_conversation_context(
             user_id=user_id,
             channel_id=channel_id
@@ -66,14 +107,11 @@ class ChatProcessor:
         # Prepare messages for AI
         messages = self._prepare_messages(message, llm_context, user_id, channel_id)
         
-        # Get available tools if requested
         tools = None
         if use_tools:
-            # Get tools specific to the user's current agent
             tool_names = self.agent_manager.get_user_tools(user_id, channel_id)
             
             if tool_names:
-                # Get the actual tool instances from the registry
                 available_tools = []
                 for tool_name in tool_names:
                     tool = tool_registry.get_tool(tool_name)
@@ -84,7 +122,6 @@ class ChatProcessor:
                     tools = [tool.get_schema() for tool in available_tools]
         
         try:
-            # Get AI response
             provider = self.providers[self.current_provider]
             response = await provider.chat_completion(
                 messages=messages,
@@ -96,14 +133,33 @@ class ChatProcessor:
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 tool_results = await self._execute_tools(response.tool_calls, self.current_provider)
                 
-                # Check for agent switches and update storage
+                # Check for agent switches and provider switches
                 for tool_result in tool_results:
+                    # Handle agent switches
                     if tool_result.get("metadata", {}).get("agent_switch"):
                         new_agent_id = tool_result.get("metadata", {}).get("new_agent_id")
                         if new_agent_id:
                             self._update_conversation_agent(user_id, channel_id, new_agent_id)
+                    
+                    # Handle provider switches
+                    if tool_result.get("metadata", {}).get("provider_switch"):
+                        new_provider = tool_result.get("metadata", {}).get("new_provider")
+                        new_model = tool_result.get("metadata", {}).get("new_model")
+                        if new_provider and new_provider in self.providers:
+                            # Validate provider is available
+                            if self.providers[new_provider].is_available():
+                                self.current_provider = new_provider
+                                logger.info(f"Switched provider to {new_provider} for user {user_id} in channel {channel_id}")
+                                
+                                # Update model if specified
+                                if new_model:
+                                    if hasattr(self.providers[new_provider], 'model'):
+                                        old_model = self.providers[new_provider].model
+                                        self.providers[new_provider].model = new_model
+                                        logger.info(f"Switched model from {old_model} to {new_model}")
+                            else:
+                                logger.warning(f"Provider {new_provider} is not available")
                 
-                # Add tool results to conversation
                 for tool_result in tool_results:
                     self.conversation_manager.add_tool_result(
                         user_id=user_id,
@@ -113,7 +169,6 @@ class ChatProcessor:
                         metadata={"tool_call_id": tool_result["tool_call_id"]}
                     )
                 
-                # Add tool results to messages for final response
                 messages.append({
                     "role": "assistant",
                     "content": response.content,
@@ -130,7 +185,6 @@ class ChatProcessor:
                     ]
                 })
                 
-                # Add tool results
                 for tool_result in tool_results:
                     messages.append({
                         "role": "tool",
@@ -138,7 +192,6 @@ class ChatProcessor:
                         "content": json.dumps(tool_result["result"])
                     })
                 
-                # Get final response from AI
                 final_response = await provider.chat_completion(
                     messages=messages,
                     temperature=self.settings.ai_temperature
@@ -146,15 +199,13 @@ class ChatProcessor:
                 
                 response = final_response
             
-            # Add AI response to conversation
             self.conversation_manager.add_ai_response(
                 user_id=user_id,
                 channel_id=channel_id,
                 content=response.content,
-                metadata={"provider": self.current_provider, "model": response.model}
+                metadata={"provider": self.current_provider, "model": getattr(response, 'model', 'unknown')}
             )
             
-            # Get updated context for return
             updated_context = self.conversation_manager.get_conversation_context(
                 user_id=user_id,
                 channel_id=channel_id
@@ -163,7 +214,7 @@ class ChatProcessor:
             return {
                 "response": response.content,
                 "provider": self.current_provider,
-                "model": response.model,
+                "model": getattr(response, 'model', 'unknown'),
                 "usage": response.usage.model_dump() if response.usage else {},
                 "conversation_history": updated_context,
                 "conversation_id": conversation.id
@@ -173,7 +224,6 @@ class ChatProcessor:
             logger.error(f"Error processing message: {str(e)}")
             error_response = f"Sorry, I encountered an error: {str(e)}"
             
-            # Add error response to conversation
             self.conversation_manager.add_ai_response(
                 user_id=user_id,
                 channel_id=channel_id,
@@ -184,6 +234,8 @@ class ChatProcessor:
             return {
                 "response": error_response,
                 "provider": self.current_provider,
+                "model": "unknown",
+                "usage": {},
                 "error": str(e),
                 "conversation_history": self.conversation_manager.get_conversation_context(
                     user_id=user_id,
@@ -192,7 +244,6 @@ class ChatProcessor:
             }
     
     async def _execute_tools(self, tool_calls: List[Any], provider_name: str) -> List[Dict[str, Any]]:
-        """Execute the requested tools and return results."""
         results = []
         
         for tool_call in tool_calls:
@@ -267,40 +318,30 @@ class ChatProcessor:
         """Prepare messages for AI processing."""
         messages = []
         
-        # Get agent system prompt
         system_message = self.agent_manager.get_user_system_prompt(user_id, channel_id)
         if system_message:
             messages.append({"role": "system", "content": system_message})
         
-        # Add conversation history (limit to configured max messages to avoid token limits)
         for msg in conversation_history[-self.settings.max_messages_per_conversation:]:
             messages.append(msg)
         
-        # Add current message
         messages.append({"role": "user", "content": message})
         
         return messages
     
     def _update_conversation_agent(self, user_id: str, channel_id: str, agent_id: str):
-        """Update the current agent in the agent manager tool for the given user and channel."""
         try:
-            # Get the global agent manager tool instance
             from app.core.tools.agent_manager import get_agent_manager_tool
             agent_tool = get_agent_manager_tool()
             
-            # Update the user's agent preference
             key = f"{user_id}:{channel_id}"
             agent_tool._user_agents[key] = agent_id
             
             logger.info(f"Updated agent to {agent_id} for user {user_id} in channel {channel_id}")
         except Exception as e:
             logger.error(f"Failed to update conversation agent: {str(e)}")
-    
-    
-# Global chat processor instance - removed to prevent import errors
+
 # chat_processor = ChatProcessor()
 
-
 def get_chat_processor() -> ChatProcessor:
-    """Get a chat processor instance."""
     return ChatProcessor()

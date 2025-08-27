@@ -1,15 +1,9 @@
-"""
-OpenAI provider for AI chat functionality.
-"""
-
 from typing import List, Dict, Any, Optional
 import openai
 from app.config import get_settings
 from app.core.providers.models import ChatCompletionResult, UsageInfo
 
-
 class OpenAIProvider:
-    """OpenAI API provider for chat completion."""
     
     def __init__(self):
         self.settings = get_settings()
@@ -48,14 +42,12 @@ class OpenAIProvider:
         try:
             response = self.client.chat.completions.create(**request_data)
             
-            # Create usage info
             usage = UsageInfo(
                 prompt_tokens=response.usage.prompt_tokens,
                 completion_tokens=response.usage.completion_tokens,
                 total_tokens=response.usage.total_tokens
             )
             
-            # Create result with unified model
             result = ChatCompletionResult(
                 content=response.choices[0].message.content or "",
                 model=response.model,
@@ -74,5 +66,4 @@ class OpenAIProvider:
             raise Exception(f"OpenAI API error: {str(e)}")
     
     def is_available(self) -> bool:
-        """Check if OpenAI provider is available."""
         return bool(self.settings.openai_api_key)

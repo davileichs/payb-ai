@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   slack-bot:
     build:
@@ -16,7 +14,7 @@ services:
     env_file:
       - ../.env
     volumes:
-      - ../app:/app/app  # For development hot-reload
+      - ../app:/app/app
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -27,23 +25,6 @@ services:
     networks:
       - slack-bot-network
 
-  # Optional: Ollama service for local AI
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    networks:
-      - slack-bot-network
-    profiles:
-      - ollama  # Only start when explicitly requested
-
-  # Optional: Redis for conversation storage (future enhancement)
   redis:
     image: redis:7-alpine
     container_name: slack-bot-redis
@@ -55,10 +36,9 @@ services:
     networks:
       - slack-bot-network
     profiles:
-      - redis  # Only start when explicitly requested
+      - redis
 
 volumes:
-  ollama_data:
   redis_data:
 
 networks:

@@ -1,0 +1,88 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+test:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git curl
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml
+  coverage: '/TOTAL.+?(\d+\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+    expire_in: 30 days
+  only:
+    - merge_requests
+    - main
+    - develop
+
+lint:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install --upgrade pip
+    - pip install flake8 black isort
+  script:
+    - flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
+    - black --check app
+    - isort --check-only app
+  only:
+    - merge_requests
+    - main
+    - develop
+
+build_docker:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - docker build -f docker/Dockerfile -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker build -f docker/Dockerfile -t $CI_REGISTRY_IMAGE:latest .
+  only:
+    - main
+
+deploy_staging:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to staging environment"
+    - echo "Application health check:"
+    - curl -f http://staging-url/health || exit 1
+  environment:
+    name: staging
+    url: http://staging-url
+  only:
+    - develop
+
+deploy_production:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to production environment"
+    - echo "Application health check:"
+    - curl -f http://production-url/health || exit 1
+  environment:
+    name: production
+    url: http://production-url
+  when: manual
+  only:
+    - main

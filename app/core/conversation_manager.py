@@ -1,8 +1,3 @@
-"""
-Conversation manager for maintaining chat history and context for AI models.
-This service maintains conversation history that is only accessible to AI processing.
-"""
-
 import json
 import logging
 from typing import Dict, List, Optional, Any
@@ -13,26 +8,21 @@ from app.core.storage.redis_storage import get_redis_storage
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class Message:
-    """Represents a single message in a conversation."""
     role: str  # 'user', 'assistant', 'system', 'tool'
     content: str
     timestamp: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to minimal dictionary for cache storage."""
         return {
             "role": self.role,
             "content": self.content
         }
 
-
 @dataclass
 class Conversation:
-    """Represents a complete conversation session."""
     id: str
     user_id: str
     channel_id: str
@@ -44,7 +34,6 @@ class Conversation:
     metadata: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to minimal dictionary for cache storage."""
         return {
             "user_id": self.user_id,
             "channel_id": self.channel_id,
@@ -52,7 +41,6 @@ class Conversation:
         }
     
     def get_llm_context(self, max_messages: int = 20) -> List[Dict[str, str]]:
-        """Get conversation context formatted for LLM consumption."""
         # Filter out system messages and tool messages for LLM context
         llm_messages = []
         for msg in self.messages[-max_messages:]:
@@ -64,7 +52,6 @@ class Conversation:
         return llm_messages
     
     def add_message(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None):
-        """Add a new message to the conversation."""
         message = Message(
             role=role,
             content=content,
@@ -75,18 +62,14 @@ class Conversation:
         self.updated_at = datetime.now(timezone.utc)
     
     def get_message_count(self) -> int:
-        """Get total number of messages in conversation."""
         return len(self.messages)
 
-
 class ConversationManager:
-    """Manages conversation history and context for AI models."""
     
     def __init__(self):
         self.settings = get_settings()
         self.conversations: Dict[str, Conversation] = {}
         
-        # Load configuration from settings
         self.max_messages_per_conversation = self.settings.max_messages_per_conversation
         
         # Initialize storage (Redis if available, otherwise in-memory)
@@ -97,7 +80,6 @@ class ConversationManager:
         self._load_conversations_sync()
     
     def _load_conversations_sync(self):
-        """Synchronously load conversations from storage."""
         if self.use_redis:
             try:
                 # Try to connect to Redis synchronously
@@ -111,7 +93,6 @@ class ConversationManager:
                         # Run in current loop
                         loop.run_until_complete(self._connect_redis())
                 except RuntimeError:
-                    # No event loop, skip Redis connection
                     self.use_redis = False
                     logger.info("Conversation manager initialized with in-memory storage (no event loop)")
             except Exception as e:
@@ -121,7 +102,6 @@ class ConversationManager:
             logger.info("Conversation manager initialized with in-memory storage")
     
     async def _connect_redis(self):
-        """Connect to Redis storage."""
         try:
             await self.redis_storage.connect()
             logger.info("Conversation manager initialized with Redis storage")
@@ -130,18 +110,15 @@ class ConversationManager:
             self.use_redis = False
     
     async def _load_conversations(self):
-        """Load conversations from storage (async version for compatibility)."""
         # This method is kept for compatibility but the actual loading is done in _load_conversations_sync
         pass
     
     async def _save_conversations(self):
-        """Save conversations to storage."""
         if self.use_redis:
             for conversation in self.conversations.values():
                 await self.redis_storage.save_conversation(conversation.to_dict())
     
     def _save_conversations_sync(self):
-        """Synchronous wrapper for saving conversations."""
         import asyncio
         try:
             loop = asyncio.get_event_loop()
@@ -156,7 +133,6 @@ class ConversationManager:
             pass
     
     def _generate_conversation_id(self, user_id: str, channel_id: str) -> str:
-        """Generate a unique conversation ID."""
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         return f"{user_id}_{channel_id}_{timestamp}"
     
@@ -167,29 +143,29 @@ class ConversationManager:
         provider: str,
         model: str
     ) -> Conversation:
-        """Get existing conversation or create a new one."""
-        conversation_key = f"{user_id}:{channel_id}"
+        """Get existing conversation or create a new one. Conversations are shared per channel."""
+        # Use only channel_id as the key - all users in the same channel share conversation
+        conversation_key = channel_id
         
         if conversation_key in self.conversations:
             conversation = self.conversations[conversation_key]
             return conversation
         
-        # Create new conversation
-        conversation_id = self._generate_conversation_id(user_id, channel_id)
+        conversation_id = self._generate_conversation_id("shared", channel_id)
         conversation = Conversation(
             id=conversation_id,
-            user_id=user_id,
+            user_id="shared",  # Indicates this is a shared channel conversation
             channel_id=channel_id,
             provider=provider,
             model=model,
             messages=[],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-            metadata={"source": "slack"}
+            metadata={"source": "slack", "type": "shared_channel"}
         )
         
         self.conversations[conversation_key] = conversation
-        logger.info(f"Created new conversation {conversation_id} for {conversation_key}")
+        logger.info(f"Created new shared conversation {conversation_id} for channel {channel_id}")
         
         return conversation
     
@@ -202,9 +178,16 @@ class ConversationManager:
         model: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Conversation:
-        """Add a user message to the conversation."""
+        """Add a user message to the shared channel conversation."""
         conversation = self.get_or_create_conversation(user_id, channel_id, provider, model)
-        conversation.add_message("user", content, metadata)
+        
+        user_tagged_content = f"[{user_id}]: {content}"
+        
+        if metadata is None:
+            metadata = {}
+        metadata["sender_user_id"] = user_id
+        
+        conversation.add_message("user", user_tagged_content, metadata)
         
         # Check message limit
         if conversation.get_message_count() > self.max_messages_per_conversation:
@@ -220,16 +203,22 @@ class ConversationManager:
         content: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[Conversation]:
-        """Add an AI response to the conversation."""
-        conversation_key = f"{user_id}:{channel_id}"
+        """Add an AI response to the shared channel conversation."""
+        # Use channel_id as the key since conversations are shared per channel
+        conversation_key = channel_id
         
         if conversation_key in self.conversations:
             conversation = self.conversations[conversation_key]
             conversation.add_message("assistant", content, metadata)
+            
+            # Check message limit
+            if conversation.get_message_count() > self.max_messages_per_conversation:
+                self._trim_conversation(conversation)
+            
             self._save_conversations_sync()
             return conversation
         
-        logger.warning(f"No conversation found for {conversation_key}")
+        logger.warning(f"No shared conversation found for channel {channel_id}")
         return None
     
     def add_tool_result(
@@ -240,8 +229,9 @@ class ConversationManager:
         tool_result: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[Conversation]:
-        """Add a tool execution result to the conversation."""
-        conversation_key = f"{user_id}:{channel_id}"
+        """Add a tool execution result to the shared channel conversation."""
+        # Use channel_id as the key since conversations are shared per channel
+        conversation_key = channel_id
         
         if conversation_key in self.conversations:
             conversation = self.conversations[conversation_key]
@@ -258,8 +248,9 @@ class ConversationManager:
         channel_id: str,
         max_messages: int = None
     ) -> List[Dict[str, str]]:
-        """Get conversation context for LLM processing."""
-        conversation_key = f"{user_id}:{channel_id}"
+        """Get conversation context for LLM processing from shared channel conversation."""
+        # Use channel_id as the key since conversations are shared per channel
+        conversation_key = channel_id
         
         if conversation_key in self.conversations:
             conversation = self.conversations[conversation_key]
@@ -271,8 +262,8 @@ class ConversationManager:
         return []
     
     def clear_conversation(self, user_id: str, channel_id: str) -> bool:
-        """Clear a specific conversation."""
-        conversation_key = f"{user_id}:{channel_id}"
+        # Use channel_id as the key since conversations are shared per channel
+        conversation_key = channel_id
         
         if conversation_key in self.conversations:
             del self.conversations[conversation_key]
@@ -282,28 +273,25 @@ class ConversationManager:
                 try:
                     loop = asyncio.get_event_loop()
                     if loop.is_running():
-                        loop.create_task(self.redis_storage.delete_conversation(user_id, channel_id))
+                        loop.create_task(self.redis_storage.delete_conversation("shared", channel_id))
                     else:
-                        loop.run_until_complete(self.redis_storage.delete_conversation(user_id, channel_id))
+                        loop.run_until_complete(self.redis_storage.delete_conversation("shared", channel_id))
                 except RuntimeError:
-                    # No event loop available; skip Redis delete
                     pass
             self._save_conversations_sync()
-            logger.info(f"Cleared conversation {conversation_key}")
+            logger.info(f"Cleared shared conversation for channel {channel_id}")
             return True
         
         return False
     
     def cleanup_conversations(self, max_conversations: int = None) -> int:
-        """Clean up conversations to free memory. Can be called manually via API."""
         if max_conversations is None:
-            # Default: keep only the 10 most recent conversations
-            max_conversations = 10
+            # No automatic cleanup - conversations persist indefinitely
+            return 0
         
         if len(self.conversations) <= max_conversations:
             return 0
         
-        # Sort conversations by last update time and remove oldest
         sorted_conversations = sorted(
             self.conversations.items(),
             key=lambda x: x[1].updated_at
@@ -322,7 +310,6 @@ class ConversationManager:
         return len(removed_keys)
     
     def _trim_conversation(self, conversation: Conversation):
-        """Trim conversation to keep only recent messages."""
         if len(conversation.messages) > self.max_messages_per_conversation:
             # Keep system message if exists, then recent messages
             system_messages = [msg for msg in conversation.messages if msg.role == "system"]
@@ -335,7 +322,6 @@ class ConversationManager:
             logger.info(f"Trimmed conversation {conversation.id} to {len(conversation.messages)} messages")
     
     def get_conversation_stats(self) -> Dict[str, Any]:
-        """Get statistics about conversations (for monitoring)."""
         total_conversations = len(self.conversations)
         total_messages = sum(conv.get_message_count() for conv in self.conversations.values())
         
@@ -348,18 +334,13 @@ class ConversationManager:
         }
     
     def get_configuration(self) -> Dict[str, Any]:
-        """Get current conversation configuration."""
         return {
             "max_messages_per_conversation": self.settings.max_messages_per_conversation,
             "storage_type": "redis" if self.use_redis else "in-memory",
             "redis_configured": bool(self.settings.redis_host)
         }
 
-
-# Global conversation manager instance
 conversation_manager = ConversationManager()
 
-
 def get_conversation_manager() -> ConversationManager:
-    """Get the global conversation manager instance."""
     return conversation_manager

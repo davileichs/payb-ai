@@ -1,16 +1,8 @@
-"""
-Agent manager tool for handling AI agent switching and management.
-"""
-
 from typing import Dict, Any
 from app.core.tools.base import BaseTool, ToolResult, register_tool
 from app.core.agents import get_agent_manager
 
-
 class AgentManagerTool(BaseTool):
-    """
-    A tool for managing AI agents and switching between them.
-    """
     
     def __init__(self):
         super().__init__()
@@ -18,7 +10,6 @@ class AgentManagerTool(BaseTool):
         self._user_agents = {}
     
     async def execute(self, **kwargs) -> ToolResult:
-        """Execute the agent manager tool."""
         try:
             action = kwargs.get("action", "current")
             agent_id = kwargs.get("agent_id")
@@ -77,7 +68,6 @@ class AgentManagerTool(BaseTool):
             )
     
     async def _switch_agent(self, agent_manager, agent_id: str, user_id: str, channel_id: str) -> ToolResult:
-        """Switch to a different AI agent for a specific user and channel."""
         try:
             # Validate agent
             if not agent_manager.validate_agent(agent_id):
@@ -87,7 +77,6 @@ class AgentManagerTool(BaseTool):
                     metadata={"tool_name": "AgentManager"}
                 )
             
-            # Get agent information
             agent_info = agent_manager.get_agent_info(agent_id)
             
             # Store the user's agent preference
@@ -115,7 +104,6 @@ class AgentManagerTool(BaseTool):
             )
     
     def _list_agents(self, agent_manager) -> ToolResult:
-        """List available AI agents."""
         try:
             agents_info = agent_manager.get_all_agents_info()
             
@@ -136,7 +124,6 @@ class AgentManagerTool(BaseTool):
             )
     
     def _get_current_agent(self, agent_manager, user_id: str, channel_id: str) -> ToolResult:
-        """Get current agent information for a specific user and channel."""
         try:
             key = f"{user_id}:{channel_id}"
             current_agent_id = self._user_agents.get(key, agent_manager.default_agent)
@@ -159,7 +146,6 @@ class AgentManagerTool(BaseTool):
             )
     
     def _get_agent_info(self, agent_manager, agent_id: str) -> ToolResult:
-        """Get information about a specific agent."""
         try:
             if not agent_manager.validate_agent(agent_id):
                 return ToolResult(
@@ -187,12 +173,10 @@ class AgentManagerTool(BaseTool):
             )
     
     def get_user_agent(self, user_id: str, channel_id: str) -> str:
-        """Get the current agent for a specific user and channel."""
         key = f"{user_id}:{channel_id}"
         if key in self._user_agents:
             return self._user_agents[key]
         
-        # Get the default agent from the agent manager
         try:
             agent_manager = get_agent_manager()
             return agent_manager.default_agent
@@ -200,12 +184,9 @@ class AgentManagerTool(BaseTool):
             # Fallback to a known agent ID
             return "default_agent"
 
-
 # Register the tool automatically
 _agent_manager_tool = AgentManagerTool()
 register_tool(_agent_manager_tool)
 
-
 def get_agent_manager_tool() -> AgentManagerTool:
-    """Get the global agent manager tool instance."""
     return _agent_manager_tool

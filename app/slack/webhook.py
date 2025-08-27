@@ -1,7 +1,3 @@
-"""
-Slack webhook endpoint for receiving and processing Slack events.
-"""
-
 import logging
 from typing import Dict, Any
 from fastapi import Request, HTTPException, status
@@ -10,18 +6,14 @@ from app.slack.events import get_event_handler
 
 logger = logging.getLogger(__name__)
 
-
 class SlackWebhook:
-    """Handles Slack webhook requests."""
     
     def __init__(self):
         self.bot = get_slack_bot()
         self.event_handler = get_event_handler()
     
     async def handle_webhook(self, request: Request) -> Dict[str, Any]:
-        """Handle incoming Slack webhook requests."""
         try:
-            # Get request body and headers
             body = await request.body()
             body_str = body.decode("utf-8")
             headers = dict(request.headers)
@@ -79,7 +71,6 @@ class SlackWebhook:
             )
     
     async def _process_event(self, event_data: str) -> None:
-        """Process a Slack event."""
         try:
             # Parse event data
             if isinstance(event_data, str):
@@ -99,11 +90,7 @@ class SlackWebhook:
         except Exception as e:
             logger.error(f"Error processing event: {str(e)}")
 
-
-# Global webhook handler instance
 webhook_handler = SlackWebhook()
 
-
 def get_webhook_handler() -> SlackWebhook:
-    """Get the global webhook handler instance."""
     return webhook_handler

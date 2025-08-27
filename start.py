@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""
-Startup script for the Slack Bot AI Chat application.
-"""
 
 import uvicorn
 from app.config import get_settings

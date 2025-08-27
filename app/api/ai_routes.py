@@ -1,7 +1,3 @@
-"""
-AI chat external API routes with JWT authentication.
-"""
-
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -11,37 +7,29 @@ from app.core.tools.base import tool_registry
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
-
 class ChatRequest(BaseModel):
-    """Request model for AI chat."""
     message: str
     user_id: str
     channel_id: str
     use_tools: bool = True
-    temperature: Optional[float] = None  # Override AI temperature if specified
-
+    temperature: Optional[float] = None
 
 class ChatResponse(BaseModel):
-    """Response model for AI chat."""
     response: str
     provider: str
     model: str
     usage: Dict[str, Any]
     conversation_history: List[Dict[str, str]]
 
-
 class HealthResponse(BaseModel):
-    """Health check response."""
     status: str
     tools_count: int
-
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(
     request: ChatRequest,
-    current_user: dict = Depends(get_current_user)
+    _: dict = Depends(auth_scheme)
 ):
-    """Chat with AI using JWT authentication."""
     try:
         chat_processor = get_chat_processor()
         
@@ -66,10 +54,8 @@ async def chat_with_ai(
             detail=f"Error processing chat: {str(e)}"
         )
 
-
 @router.get("/health", response_model=HealthResponse)
 async def ai_health_check():
-    """Health check for AI services."""
     chat_processor = get_chat_processor()
     
     return HealthResponse(

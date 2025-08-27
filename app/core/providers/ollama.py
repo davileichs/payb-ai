@@ -1,16 +1,10 @@
-"""
-Ollama provider for AI chat functionality.
-"""
-
 from typing import List, Dict, Any, Optional
 import httpx
 import json
 from app.config import get_settings
 from app.core.providers.models import ChatCompletionResult, UsageInfo
 
-
 class OllamaProvider:
-    """Ollama API provider for chat completion."""
     
     def __init__(self):
         self.settings = get_settings()
@@ -45,7 +39,6 @@ class OllamaProvider:
         if max_tokens:
             request_data["options"]["num_predict"] = max_tokens
         
-        # Add tools if provided (modern Ollama supports native tool calling)
         if tools:
             request_data["tools"] = tools
         
@@ -60,14 +53,12 @@ class OllamaProvider:
                 
                 result_data = response.json()
                 
-                # Create usage info
                 usage = UsageInfo(
                     prompt_tokens=result_data.get("prompt_eval_count", 0),
                     completion_tokens=result_data.get("eval_count", 0),
                     total_tokens=result_data.get("prompt_eval_count", 0) + result_data.get("eval_count", 0)
                 )
                 
-                # Create result with unified model
                 result = ChatCompletionResult(
                     content=result_data.get("message", {}).get("content", ""),
                     model=result_data.get("model", self.model),
@@ -84,11 +75,9 @@ class OllamaProvider:
             raise Exception(f"Ollama API error: {str(e)}")
     
     def is_available(self) -> bool:
-        """Check if Ollama provider is available."""
         return bool(self.base_url)
     
     async def health_check(self) -> bool:
-        """Check if Ollama service is healthy."""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{self.base_url}/api/tags", timeout=5.0)

@@ -1,20 +1,10 @@
-"""
-Sample weather tool for demonstration purposes.
-"""
-
 import asyncio
 from typing import Dict, Any
 from app.core.tools.base import BaseTool, ToolResult, register_tool
 
-
 class WeatherTool(BaseTool):
-    """
-    A sample tool that provides weather information.
-    This demonstrates how to create and register custom tools.
-    """
     
     async def execute(self, **kwargs) -> ToolResult:
-        """Execute the weather tool."""
         try:
             location = kwargs.get("location", "Unknown")
             units = kwargs.get("units", "metric")
@@ -47,7 +37,6 @@ class WeatherTool(BaseTool):
                 error=str(e),
                 metadata={"tool_name": "WeatherTool"}
             )
-
 
 # Register the tool automatically
 register_tool(WeatherTool())

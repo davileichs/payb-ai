@@ -1,19 +1,12 @@
-"""
-Authentication middleware for JWT token validation.
-"""
-
 from typing import Optional
 from fastapi import Request, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.auth.jwt_handler import get_jwt_handler
+from app.config import get_settings
 
-
-class JWTBearer(HTTPBearer):
-    """JWT Bearer token authentication scheme."""
-    
+class APIKeyBearer(HTTPBearer):
     def __init__(self, auto_error: bool = True):
         super().__init__(auto_error=auto_error)
-        self.jwt_handler = get_jwt_handler()
+        self.settings = get_settings()
     
     async def __call__(self, request: Request) -> Optional[HTTPAuthorizationCredentials]:
         credentials: HTTPAuthorizationCredentials = await super().__call__(request)
@@ -21,43 +14,36 @@ class JWTBearer(HTTPBearer):
         if not credentials:
             if self.auto_error:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid authorization code."
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Missing API key. Please provide a Bearer token."
                 )
             return None
         
         if credentials.scheme != "Bearer":
             if self.auto_error:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid authentication scheme."
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication scheme. Use Bearer token."
                 )
             return None
         
-        # Verify the JWT token
-        payload = self.jwt_handler.verify_token(credentials.credentials)
-        if not payload:
+        if credentials.credentials != self.settings.jwt_secret_key:
             if self.auto_error:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid token or expired token."
+                    detail="Invalid API key."
                 )
             return None
         
-        # Add user info to request state
-        request.state.user = payload
+        request.state.authenticated = True
         return credentials
 
-
 def get_current_user(request: Request) -> dict:
-    """Get the current authenticated user from request state."""
-    if not hasattr(request.state, 'user'):
+    if not hasattr(request.state, 'authenticated') or not request.state.authenticated:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated"
         )
-    return request.state.user
+    return {"authenticated": True, "api_access": True}
 
-
-# Global auth dependency
-auth_scheme = JWTBearer()
+auth_scheme = APIKeyBearer()

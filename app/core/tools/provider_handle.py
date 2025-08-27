@@ -1,18 +1,9 @@
-"""
-Provider handle tool for managing AI provider switching and settings.
-"""
-
 from typing import Dict, Any
 from app.core.tools.base import BaseTool, ToolResult, register_tool
 
-
 class ProviderHandle(BaseTool):
-    """
-    A tool for managing AI providers and switching between them.
-    """
     
     async def execute(self, **kwargs) -> ToolResult:
-        """Execute the provider handle tool."""
         try:
             action = kwargs.get("action", "status")
             provider = kwargs.get("provider")
@@ -56,20 +47,24 @@ class ProviderHandle(BaseTool):
             )
     
     async def _switch_provider(self, provider: str, model: str = None) -> ToolResult:
-        """Switch to a different AI provider."""
         try:
-            # This tool will be called by the chat processor, so we can't directly switch
-            # Instead, return instructions for the user
+            # Return proper metadata for the chat processor to handle the switch
             return ToolResult(
                 success=True,
                 data={
-                    "message": f"Provider switch requested to {provider}",
+                    "message": f"Provider switched to {provider}" + (f" with model {model}" if model else ""),
                     "action": "switch_provider",
                     "provider": provider,
                     "model": model,
-                    "note": "Provider switching is handled by the chat processor. This request has been logged."
+                    "status": "success"
                 },
-                metadata={"tool_name": "ProviderHandle", "action": "switch_provider"}
+                metadata={
+                    "tool_name": "ProviderHandle", 
+                    "action": "switch_provider",
+                    "provider_switch": True,
+                    "new_provider": provider,
+                    "new_model": model
+                }
             )
             
         except Exception as e:
@@ -80,27 +75,27 @@ class ProviderHandle(BaseTool):
             )
     
     def _list_providers(self) -> ToolResult:
-        """List available AI providers."""
         try:
-            providers_info = {
-                "openai": {
-                    "name": "OpenAI",
-                    "description": "OpenAI GPT models via API",
-                    "models": ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo"],
-                    "status": "Available with API key"
-                },
-                "ollama": {
-                    "name": "Ollama",
-                    "description": "Local AI models via Ollama",
-                    "models": ["llama2", "mistral", "codellama", "neural-chat"],
-                    "status": "Available locally"
-                }
-            }
+            # Import here to avoid circular imports
+            from app.core.chat_processor import get_chat_processor
+            
+            chat_processor = get_chat_processor()
+            providers_info = {}
+            
+            for name, provider in chat_processor.providers.items():
+                if provider is not None:
+                    providers_info[name] = {
+                        "name": name.title(),
+                        "description": f"{name.title()} AI provider",
+                        "status": "Available" if provider.is_available() else "Unavailable",
+                        "is_current": name == chat_processor.current_provider
+                    }
             
             return ToolResult(
                 success=True,
                 data={
                     "providers": providers_info,
+                    "current_provider": chat_processor.current_provider,
                     "message": "Available AI providers and their capabilities"
                 },
                 metadata={"tool_name": "ProviderHandle"}
@@ -114,14 +109,20 @@ class ProviderHandle(BaseTool):
             )
     
     def _get_status(self) -> ToolResult:
-        """Get current provider status."""
         try:
-            # Return general status information
+            # Import here to avoid circular imports
+            from app.core.chat_processor import get_chat_processor
+            
+            chat_processor = get_chat_processor()
+            available_providers = [name for name, provider in chat_processor.providers.items() 
+                                 if provider is not None and provider.is_available()]
+            
             status_info = {
                 "message": "Provider status information",
-                "note": "Detailed status is available through the chat processor",
-                "available_providers": ["openai", "ollama"],
-                "current_provider": "Determined by chat processor configuration"
+                "current_provider": chat_processor.current_provider,
+                "available_providers": available_providers,
+                "total_providers": len(chat_processor.providers),
+                "status": "healthy" if available_providers else "no providers available"
             }
             
             return ToolResult(
@@ -138,7 +139,6 @@ class ProviderHandle(BaseTool):
             )
     
     async def _test_provider(self, provider: str = None) -> ToolResult:
-        """Test a specific provider or all providers."""
         try:
             if provider:
                 # Test specific provider
@@ -167,7 +167,6 @@ class ProviderHandle(BaseTool):
                 error=str(e),
                 metadata={"tool_name": "ProviderHandle"}
             )
-
 
 # Register the tool automatically
 register_tool(ProviderHandle())
