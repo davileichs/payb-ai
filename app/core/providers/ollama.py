@@ -25,9 +25,7 @@ class OllamaProvider(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None
     ) -> ChatCompletionResult:
-        for msg in messages:
-            if msg["role"] == "system":
-                msg["role"] = "assistant"
+        # Keep system messages as system messages for proper behavior setting
         
         request_data = {
             "model": self.model,
@@ -149,7 +147,9 @@ class OllamaProvider(BaseAIProvider):
                 elif isinstance(tool_call, dict) and 'function' in tool_call:
                     # Dictionary format (normalized)
                     tool_name = tool_call['function']['name']
-                    tool_args = json.loads(tool_call['function']['arguments'])
+                    tool_args = tool_call['function']['arguments']
+                    if isinstance(tool_args, str):
+                        tool_args = json.loads(tool_args)
                     tool_call_id = tool_call['id']
                 else:
                     # Fallback for any other format
