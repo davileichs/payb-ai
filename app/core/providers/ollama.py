@@ -61,14 +61,32 @@ class OllamaProvider(BaseAIProvider):
                     total_tokens=result_data.get("prompt_eval_count", 0) + result_data.get("eval_count", 0)
                 )
                 
+                message_content = result_data.get("message", {}).get("content", "")
+                
+                # Check if the content contains tool call JSON (Ollama sometimes includes this in content)
+                tool_calls = None
+                if "tool_calls" in result_data.get("message", {}):
+                    tool_calls = result_data["message"]["tool_calls"]
+                elif "tool_calls" in message_content:
+                    # Try to extract tool calls from content if Ollama includes them there
+                    try:
+                        import re
+                        tool_call_match = re.search(r'"tool_calls":\s*\[.*?\]', message_content, re.DOTALL)
+                        if tool_call_match:
+                            tool_calls = json.loads(f"{{{tool_call_match.group()}}}")["tool_calls"]
+                            # Remove tool calls from content to avoid duplication
+                            message_content = re.sub(r'"tool_calls":\s*\[.*?\],?\s*', '', message_content, flags=re.DOTALL)
+                    except:
+                        pass
+                
                 result = ChatCompletionResult(
-                    content=result_data.get("message", {}).get("content", ""),
+                    content=message_content,
                     model=result_data.get("model", self.model),
                     usage=usage
                 )
                 
-                if "tool_calls" in result_data.get("message", {}):
-                    result.tool_calls = result_data["message"]["tool_calls"]
+                if tool_calls:
+                    result.tool_calls = tool_calls
                 
                 return result
                 
