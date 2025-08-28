@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     
     max_messages_per_conversation: int = Field(default=100, env="MAX_MESSAGES_PER_CONVERSATION")
     
+    open_weather_key: Optional[str] = Field(None, env="OPEN_WEATHER_KEY")
+    
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     
     class Config:

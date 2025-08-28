@@ -1,0 +1,22 @@
+{
+  "agents": {
+    "default_agent": {
+      "name": "Payb.ai Agent",
+      "description": "General-purpose AI assistant",
+      "system_prompt": "You are a helpful AI assistant called payb.ai",
+      "tools": ["general"]
+    }
+  },
+  "tool_categories": {
+    "general": [
+      "ConversationManagerTool", 
+      "AgentManagerTool",
+      "PayablDocsSearch",
+      "WeatherTool"
+    ],
+    "technical": [
+      "WeatherTool"
+    ]
+  },
+  "default_agent": "default_agent"
+}

@@ -137,6 +137,8 @@ The bot supports configuration through environment variables:
 
 ### Testing
 
+#### Unit Tests
+
 ```bash
 # Run tests
 pytest tests/
@@ -144,6 +146,34 @@ pytest tests/
 # Run with coverage
 pytest --cov=app tests/
 ```
+
+#### Integration Tests
+
+Run comprehensive integration tests through Docker:
+
+```bash
+# Using Makefile (recommended)
+make integration-test
+
+# Using shell script
+./tests/run_integration_test.sh
+
+# Manual execution
+make docker-run &
+sleep 20
+python3 tests/integration_test.py
+make docker-stop
+```
+
+The integration tests verify:
+- ✅ Application health and connectivity
+- ✅ LLM response functionality
+- ✅ Provider switching (OpenAI/Ollama)
+- ✅ Weather tool integration
+- ✅ Agent name recognition (payb.ai)
+- ✅ Live configuration reload
+
+See [tests/README.md](tests/README.md) for detailed integration test documentation.
 
 ## Deployment
 

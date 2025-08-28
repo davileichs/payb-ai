@@ -1,20 +1,18 @@
 {
   "name": "WeatherTool",
-  "description": "Get current weather information for a specific location",
+  "description": "Get current weather information for a specific location. Always use metric units.",
   "parameters": {
     "type": "object",
     "properties": {
-      "location": {
-        "type": "string",
-        "description": "The city name or location to get weather for (e.g., 'New York', 'London', 'Tokyo')"
+      "latitude": {
+        "type": "number",
+        "description": "The latitude of the location to get weather for"
       },
-      "units": {
-        "type": "string",
-        "enum": ["metric", "imperial"],
-        "description": "Temperature units - metric (Celsius) or imperial (Fahrenheit)",
-        "default": "metric"
+      "longitude": {
+        "type": "number",
+        "description": "The longitude of the location to get weather for"
       }
     },
-    "required": ["location"]
+    "required": ["latitude", "longitude"]
   }
 }

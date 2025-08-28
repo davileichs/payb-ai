@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from app.core.tools.base import BaseTool, ToolResult, register_tool
-from app.core.agents import get_agent_manager
+from app.core.utils.agent_manager import get_agent_manager
 
 class AgentManagerTool(BaseTool):
     

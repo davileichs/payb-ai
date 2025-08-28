@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from app.core.tools.base import BaseTool, ToolResult, register_tool
-from app.core.conversation_manager import get_conversation_manager
+from app.core.utils.conversation_manager import get_conversation_manager
 
 class ConversationManagerTool(BaseTool):
     

@@ -1,4 +1,4 @@
-.PHONY: help install test run docker-build docker-run docker-stop clean
+.PHONY: help install test run docker-build docker-run docker-stop docker-restart docker-logs clean
 
 help: ## Show this help message
 	@echo "Slack Bot AI Chat - Available Commands:"
@@ -27,14 +27,15 @@ run-dev: ## Run with development settings
 docker-build: ## Build Docker image
 	docker build -f docker/Dockerfile -t slack-ai-bot .
 
-docker-run: ## Run with Docker Compose
-	docker-compose -f docker/docker-compose.yml up --build
-
-docker-run-ollama: ## Run with Docker Compose including Ollama
-	docker-compose -f docker/docker-compose.yml --profile ollama up --build
+docker-run: ## Run with Docker Compose (non-blocking)
+	docker-compose -f docker/docker-compose.yml up --build -d
 
 docker-stop: ## Stop Docker containers
 	docker-compose -f docker/docker-compose.yml down
+
+docker-restart: ## Stop and start Docker containers
+	docker-compose -f docker/docker-compose.yml down
+	docker-compose -f docker/docker-compose.yml up --build -d
 
 docker-logs: ## View Docker logs
 	docker-compose -f docker/docker-compose.yml logs -f
@@ -46,16 +47,10 @@ clean: ## Clean up generated files
 	rm -rf htmlcov/
 	rm -rf .coverage
 
-setup-env: ## Copy environment file template
-	cp env.example .env
-	@echo "Please edit .env file with your configuration"
+start: install run ## Install dependencies and start the application
 
-check-env: ## Check if .env file exists
-	@if [ ! -f .env ]; then \
-		echo "Error: .env file not found. Run 'make setup-env' first."; \
-		exit 1; \
-	fi
+dev: install-dev run-dev ## Install dev dependencies and start in development mode
 
-start: check-env install run ## Install dependencies and start the application
-
-dev: check-env install-dev run-dev ## Install dev dependencies and start in development mode
+integration-test: ## Run integration tests (containers must be started manually)
+	@echo "Running integration tests..."
+	@./tests/run_integration_test.sh

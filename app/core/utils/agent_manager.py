@@ -10,12 +10,29 @@ class AgentManager:
     
     def _load_agents_config(self) -> Dict[str, Any]:
         try:
-            config_path = os.path.join(os.path.dirname(__file__), "agents.json")
+            # Look for agents.json in the project root
+            # From app/core/agents/agent_manager.py -> app/core/agents -> app/core -> app -> project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            config_path = os.path.join(project_root, "agents.json")
             with open(config_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
             print(f"Error loading agents config: {e}")
             return {"agents": {}, "tool_categories": {}, "default_agent": "general"}
+    
+    def reload_agents_config(self) -> bool:
+        """Reload the agents configuration from file"""
+        try:
+            old_config = self.agents_config
+            self.agents_config = self._load_agents_config()
+            self.default_agent = self.agents_config.get("default_agent", "general")
+            print(f"Agents config reloaded successfully")
+            return True
+        except Exception as e:
+            print(f"Error reloading agents config: {e}")
+            # Restore old config if reload failed
+            self.agents_config = old_config
+            return False
     
     def get_agent_info(self, agent_id: str) -> Dict[str, Any]:
         agents = self.agents_config.get("agents", {})

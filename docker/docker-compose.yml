@@ -11,11 +11,16 @@ services:
       - PORT=8000
       - DEBUG=false
       - LOG_LEVEL=INFO
+      - REDIS_HOST=redis
     env_file:
       - ../.env
     volumes:
       - ../app:/app/app
+      - ../agents.json:/app/agents.json
+      - ../.env:/app/.env
     restart: unless-stopped
+    depends_on:
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -35,8 +40,6 @@ services:
     restart: unless-stopped
     networks:
       - slack-bot-network
-    profiles:
-      - redis
 
 volumes:
   redis_data:

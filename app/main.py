@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from app.config import get_settings
 from app.api.slack_routes import router as slack_router
 from app.api.ai_routes import router as ai_router
-from app.core.conversation_manager import get_conversation_manager
+from app.core.utils.conversation_manager import get_conversation_manager
 
 logging.basicConfig(
     level=logging.INFO,
