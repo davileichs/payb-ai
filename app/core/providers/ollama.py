@@ -63,6 +63,14 @@ class OllamaProvider(BaseAIProvider):
                 
                 message_content = result_data.get("message", {}).get("content", "")
                 
+                # Clean up Ollama response content
+                import re
+                
+                # Remove [TOOL_CALLS] markers and similar artifacts
+                message_content = re.sub(r'\[TOOL_CALLS\][^\n]*\n?', '', message_content)
+                message_content = re.sub(r'\[TOOL_CALL\][^\n]*\n?', '', message_content)
+                message_content = re.sub(r'<tool_call>[^<]*</tool_call>', '', message_content)
+                
                 # Check if the content contains tool call JSON (Ollama sometimes includes this in content)
                 tool_calls = None
                 if "tool_calls" in result_data.get("message", {}):
@@ -70,7 +78,6 @@ class OllamaProvider(BaseAIProvider):
                 elif "tool_calls" in message_content:
                     # Try to extract tool calls from content if Ollama includes them there
                     try:
-                        import re
                         tool_call_match = re.search(r'"tool_calls":\s*\[.*?\]', message_content, re.DOTALL)
                         if tool_call_match:
                             tool_calls = json.loads(f"{{{tool_call_match.group()}}}")["tool_calls"]
@@ -78,6 +85,30 @@ class OllamaProvider(BaseAIProvider):
                             message_content = re.sub(r'"tool_calls":\s*\[.*?\],?\s*', '', message_content, flags=re.DOTALL)
                     except:
                         pass
+                
+                # Normalize tool calls to match OpenAI format
+                if tool_calls:
+                    normalized_tool_calls = []
+                    for i, tool_call in enumerate(tool_calls):
+                        if isinstance(tool_call, dict):
+                            # Convert Ollama format to OpenAI format
+                            normalized_tool_call = {
+                                "id": tool_call.get("id", f"call_{i}"),
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call.get("function", {}).get("name", ""),
+                                    "arguments": tool_call.get("function", {}).get("arguments", "{}")
+                                }
+                            }
+                            normalized_tool_calls.append(normalized_tool_call)
+                        else:
+                            # Already in correct format
+                            normalized_tool_calls.append(tool_call)
+                    tool_calls = normalized_tool_calls
+                
+                # Clean up any remaining artifacts and normalize whitespace
+                message_content = re.sub(r'\n\s*\n\s*\n', '\n\n', message_content)  # Remove excessive newlines
+                message_content = message_content.strip()
                 
                 result = ChatCompletionResult(
                     content=message_content,
@@ -109,22 +140,22 @@ class OllamaProvider(BaseAIProvider):
         
         for tool_call in tool_calls:
             try:
-                # Handle different tool call formats
+                # Handle normalized tool call format (now consistent with OpenAI)
                 if hasattr(tool_call, 'function'):
-                    # OpenAI format
+                    # Object format (OpenAI style)
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
                     tool_call_id = tool_call.id
-                elif isinstance(tool_call, dict):
-                    # Dictionary format (Ollama might return this)
-                    tool_name = tool_call.get('function', {}).get('name')
-                    tool_args = json.loads(tool_call.get('function', {}).get('arguments', '{}'))
-                    tool_call_id = tool_call.get('id', f"call_{len(results)}")
+                elif isinstance(tool_call, dict) and 'function' in tool_call:
+                    # Dictionary format (normalized)
+                    tool_name = tool_call['function']['name']
+                    tool_args = json.loads(tool_call['function']['arguments'])
+                    tool_call_id = tool_call['id']
                 else:
-                    # Try to access attributes directly
-                    tool_name = getattr(tool_call, 'name', None)
-                    tool_args = json.loads(getattr(tool_call, 'arguments', '{}'))
-                    tool_call_id = getattr(tool_call, 'id', f"call_{len(results)}")
+                    # Fallback for any other format
+                    tool_name = getattr(tool_call, 'name', None) or tool_call.get('name')
+                    tool_args = json.loads(getattr(tool_call, 'arguments', '{}') or tool_call.get('arguments', '{}'))
+                    tool_call_id = getattr(tool_call, 'id', None) or tool_call.get('id', f"call_{len(results)}")
                 
                 if not tool_name:
                     logger.error(f"Could not extract tool name from tool call: {tool_call}")
